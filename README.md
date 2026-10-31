@@ -71,17 +71,19 @@ than silently skipped.
 | Part | State |
 |---|---|
 | `internal/domain` — identity number, assurance level, name, identifiers, card identity, revocation status | done, tested |
-| `internal/app/claims.go` — claim mapping for Zitadel | done, tested |
 | `internal/app/authenticate.go` — the use case and its ports | done, tested |
 | `internal/adapters/xfcc` — Envoy's `x-forwarded-client-cert` | done, tested, fuzzed |
 | `internal/adapters/revocation` — OCSP, CRL, policy engine | done, tested against real EFOS data |
 | `internal/adapters/efospki` — trust anchor and DN reader | done, tested |
+| `internal/adapters/oidcop` — claim mapping for Zitadel | done, tested |
 | `test/archguard` — the layer rules | done, verified against a provoked violation |
 | `test/authentication` — the whole chain with the real adapters | done, tested |
+| `internal/adapters/oidcop` — the OpenID Provider and the Zitadel claim mapping | done, tested end to end |
+| `internal/adapters/keys` — signing keys and the JWKS | done, tested |
 | CI, Containerfile, REUSE | done |
-| `internal/adapters/oidcop` — the OpenID Provider | outstanding |
-| `internal/adapters/keys`, `audit` | outstanding |
-| `cmd/smartcard-op`, `deploy/` | outstanding |
+| `internal/adapters/audit` — the structured audit log | outstanding |
+| `cmd/smartcard-op` — the two listeners, configuration, card login handler | outstanding |
+| `deploy/` — Envoy listeners, Kubernetes manifests, network policies | outstanding |
 
 ## What we know about EFOS from real data
 
@@ -106,6 +108,35 @@ on:
   serial numbers taken from its own revocation list.
 - The CA certificates carry `anyPolicy`; the assurance-level-bearing policy
   identifiers sit in the end-entity certificates, as the profile states.
+
+## The OpenID Provider
+
+The provider is github.com/zitadel/oidc v3.51.16. The choice was made by
+counting: `op.Storage` is 23 methods, of which 15 are real and 8 are
+deliberately disabled, and the methods are almost entirely bookkeeping — while
+a hand-rolled authorize and token endpoint would be roughly the same volume of
+code with all of it security-critical. The library already implements exact
+redirect_uri matching, single-use authorization codes, PKCE verification and
+at_hash/c_hash computation, and Zitadel's own CI tests this exact pairing.
+
+Three settings in it are load-bearing and not obvious:
+
+- `IDTokenUserinfoClaimsAssertion` must be true. The code exchange always
+  creates an access token, and with it false the library strips the profile and
+  email scopes from the id_token — which would leave Zitadel's id-token mapping
+  mode nothing to provision a user from.
+- `GrantTypes` lists only the authorization code grant. The library decides
+  whether to mint a refresh token by consulting the client's grant types, so
+  this is what makes the refresh path unreachable even if `offline_access` is
+  requested.
+- PKCE is enforced in `CreateAuthRequest`, because the library permits an absent
+  challenge and an empty method that RFC 7636 defaults to `plain`. Note that
+  Zitadel's "Use PKCE" flag is **off by default** — the gate is also what forces
+  an operator to switch it on.
+
+Claims live in this adapter rather than in the use case: they are a protocol
+projection, and the synthetic email address exists solely because of how Zitadel
+provisions brokered users. The use case has no opinion about either.
 
 Three Go traps the code now handles, each pinned by a test:
 

@@ -25,6 +25,7 @@ import (
 	"golang.org/x/crypto/ocsp"
 
 	"github.com/motrice/smartcard-op/internal/adapters/efospki"
+	"github.com/motrice/smartcard-op/internal/adapters/oidcop"
 	"github.com/motrice/smartcard-op/internal/adapters/revocation"
 	"github.com/motrice/smartcard-op/internal/app"
 	"github.com/motrice/smartcard-op/internal/domain"
@@ -288,7 +289,7 @@ func TestWholeChainYieldsClaimsZitadelCanCreateAUserFrom(t *testing.T) {
 		t.Fatalf("the whole chain rejected a correct card: %v", err)
 	}
 
-	claims, err := app.NewClaims(identity, "card-noreply.example.se")
+	claims, err := oidcop.NewClaims(identity, "card-noreply.example.se")
 	if err != nil {
 		t.Fatalf("NewClaims returned error: %v", err)
 	}

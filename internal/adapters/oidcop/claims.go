@@ -2,19 +2,28 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package app
+package oidcop
 
 import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"slices"
 	"strings"
+
+	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"golang.org/x/text/language"
 
 	"github.com/motrice/smartcard-op/internal/domain"
 )
 
 // ErrInvalidEmailDomain wraps a misconfigured domain for the synthetic email
 // addresses.
+//
+// Claims live in this adapter rather than in the use case because they are a
+// protocol projection, not a business concept. The synthetic email address
+// exists solely because of how Zitadel provisions brokered users; the use case
+// has no opinion about it and should not have to carry one.
 var ErrInvalidEmailDomain = errors.New("invalid email domain")
 
 // Claim names outside OIDC Core. They follow the Claims and Scopes
@@ -24,9 +33,11 @@ var ErrInvalidEmailDomain = errors.New("invalid email domain")
 const (
 	ClaimPersonalIdentityNumber = "https://id.oidc.se/claim/personalIdentityNumber"
 	ClaimOrgAffiliation         = "https://id.oidc.se/claim/orgAffiliation"
-	// ClaimEfosID is our own: the EFOS portal's identifier has no
-	// counterpart in the Swedish profile.
-	ClaimEfosID = "efos_id"
+	// ClaimEfosID and ClaimOrganization are our own: the EFOS portal's
+	// identifier and the employing organization's name have no counterpart
+	// in the Swedish profile.
+	ClaimEfosID       = "efos_id"
+	ClaimOrganization = "efos_organization"
 )
 
 // Claims are the facts about the user handed to Zitadel.
@@ -153,4 +164,38 @@ func checkDomain(domainName string) error {
 	}
 
 	return nil
+}
+
+// Apply writes the claims into an OIDC user info structure.
+//
+// It fills the standard claims the requested scopes cover, and always appends
+// the Swedish profile's claims: a relying party that already speaks Swedish eID
+// should be able to read the identity without knowing about EFOS, and Zitadel
+// passes unknown claims through untouched.
+func (c Claims) Apply(userinfo *oidc.UserInfo, scopes []string) {
+	userinfo.Subject = c.Sub
+
+	if slices.Contains(scopes, oidc.ScopeProfile) {
+		userinfo.PreferredUsername = c.PreferredUsername
+		userinfo.Name = c.Name
+		userinfo.GivenName = c.GivenName
+		userinfo.FamilyName = c.FamilyName
+		userinfo.Locale = oidc.NewLocale(language.Swedish)
+	}
+
+	if slices.Contains(scopes, oidc.ScopeEmail) {
+		userinfo.Email = c.Email
+		userinfo.EmailVerified = oidc.Bool(c.EmailVerified)
+	}
+
+	userinfo.AppendClaims(ClaimPersonalIdentityNumber, c.PersonalIdentityNumber)
+	userinfo.AppendClaims(ClaimEfosID, c.EfosID)
+
+	if c.OrgAffiliation != "" {
+		userinfo.AppendClaims(ClaimOrgAffiliation, c.OrgAffiliation)
+	}
+
+	if c.Organization != "" {
+		userinfo.AppendClaims(ClaimOrganization, c.Organization)
+	}
 }

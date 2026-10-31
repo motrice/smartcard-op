@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package app_test
+package oidcop_test
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/motrice/smartcard-op/internal/app"
+	"github.com/motrice/smartcard-op/internal/adapters/oidcop"
 	"github.com/motrice/smartcard-op/internal/domain"
 )
 
@@ -53,7 +53,7 @@ func identity(t *testing.T, d domain.CertificateDetails) domain.CardIdentity {
 func TestNewClaimsMapsTheWholeIdentity(t *testing.T) {
 	t.Parallel()
 
-	claims, err := app.NewClaims(identity(t, details()), emailDomain)
+	claims, err := oidcop.NewClaims(identity(t, details()), emailDomain)
 	if err != nil {
 		t.Fatalf("NewClaims returned error: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestNewClaimsFillsEveryFieldZitadelRequires(t *testing.T) {
 			d := details()
 			mutate(&d)
 
-			claims, err := app.NewClaims(identity(t, d), emailDomain)
+			claims, err := oidcop.NewClaims(identity(t, d), emailDomain)
 			if err != nil {
 				t.Fatalf("NewClaims returned error: %v", err)
 			}
@@ -149,7 +149,7 @@ func TestNewClaimsFillsEveryFieldZitadelRequires(t *testing.T) {
 func TestNewClaimsSynthesisesAValidEmailAddress(t *testing.T) {
 	t.Parallel()
 
-	claims, err := app.NewClaims(identity(t, details()), emailDomain)
+	claims, err := oidcop.NewClaims(identity(t, details()), emailDomain)
 	if err != nil {
 		t.Fatalf("NewClaims returned error: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestNewClaimsPrefersTheCertificatesOwnEmail(t *testing.T) {
 	d := details()
 	d.Email = "anna.andersson@agency.example.se"
 
-	claims, err := app.NewClaims(identity(t, d), emailDomain)
+	claims, err := oidcop.NewClaims(identity(t, d), emailDomain)
 	if err != nil {
 		t.Fatalf("NewClaims returned error: %v", err)
 	}
@@ -200,8 +200,8 @@ func TestNewClaimsRequiresAnEmailDomain(t *testing.T) {
 	t.Parallel()
 
 	for _, domainName := range []string{"", "   ", "not a domain", "@example.se"} {
-		_, err := app.NewClaims(identity(t, details()), domainName)
-		if !errors.Is(err, app.ErrInvalidEmailDomain) {
+		_, err := oidcop.NewClaims(identity(t, details()), domainName)
+		if !errors.Is(err, oidcop.ErrInvalidEmailDomain) {
 			t.Errorf("NewClaims with domain %q: error = %v, want ErrInvalidEmailDomain",
 				domainName, err)
 		}

@@ -15,6 +15,30 @@ import (
 	"github.com/motrice/smartcard-op/internal/domain"
 )
 
+var now = time.Date(2026, time.October, 31, 12, 0, 0, 0, time.UTC)
+
+// details returns an EFOS authentication certificate's details exactly as the
+// profile EFOS End Entity Person Certificates rev 1.6 prescribes them.
+func details() domain.CertificateDetails {
+	return domain.CertificateDetails{
+		SubjectSerialNumber:   "195606019577",
+		EfosID:                "EFOS-4711",
+		GivenName:             "Anna",
+		FamilyName:            "Andersson",
+		CommonName:            "Anna Andersson",
+		Organization:          "Swedish Social Insurance Agency",
+		OrganizationNumberRaw: "2021005208",
+		PolicyOIDs:            []string{"1.2.752.146.220.3"},
+		ExtendedKeyUsage: []string{
+			domain.OIDClientAuth,
+			domain.OIDSmartcardLogon,
+		},
+		HasDigitalSignature: true,
+		NotBefore:           now.Add(-24 * time.Hour),
+		NotAfter:            now.Add(24 * time.Hour),
+	}
+}
+
 // Hand-written fakes for the ports. A mocking framework would make the tests
 // harder to read for whoever reviews the security logic.
 
