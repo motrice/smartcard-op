@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Integration tests against the EFOS test environment (aiasat.efos.se,
+# crlsat.efos.se). Scheduled rather than per pull request: they depend on
+# external availability and must not be able to fail a build because
+# Försäkringskassan is doing maintenance.
+
+name: Integration
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Integration tests
+        run: just test-integration

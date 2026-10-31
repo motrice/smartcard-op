@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Pinned toolchain. The same versions locally and in CI, so `just verify`
+# means the same thing in both places. Backends and versions follow forge-ci's
+# own pins, since the same tools run in its lint gate.
+#
+# Install everything: mise install
+
+[settings]
+experimental = true
+pipx.uvx = true
+
+# Supply-chain quarantine: refuse to install a release published within the
+# last seven days, so that a freshly poisoned release has time to be noticed
+# before it lands here. The convention is taken from forge-ci.
+minimum_release_age = "7d"
+
+[tools]
+# The compiler patch version is pinned: released binaries carry its standard library.
+go = "1.27.3"
+"aqua:casey/just" = "1.58.0"
+
+# The lint and security orchestrator. See nanolinter.toml for the plan.
+# Published binaries exist for Linux only; on macOS build the pinned source as
+# forge-ci's docs/DEVELOPMENT.md describes. Hence os = ["linux"] — CI gets it,
+# and `just lint` on a Mac skips it without failing anything.
+"forgejo:itiquette/nanolinter" = { version = "0.8.6", os = ["linux"], api_url = "https://codefloe.com/api/v1" }
+"forgejo:itiquette/gommitlint" = { version = "0.93.0", os = ["linux"], api_url = "https://codefloe.com/api/v1" }
+
+# Tools nanolinter delegates to. The comment names the check ID.
+"aqua:zricethezav/gitleaks" = "v8.30.1"            # secrets
+"aqua:opengrep/opengrep" = "1.30.2"                # sast
+"aqua:crate-ci/typos" = "1.51.1"                   # typos
+"aqua:tamasfe/taplo" = "0.10.0"                    # toml
+"aqua:google/yamlfmt" = "v0.21.0"                  # yaml
+"aqua:rvben/rumdl" = "v0.2.79"                     # markdown
+"aqua:hadolint/hadolint" = "v2.15.1"               # container
+"aqua:rhysd/actionlint" = "v1.7.12"                # actions
+"aqua:aquasecurity/trivy" = "0.76.0"               # trivy-fs
+"aqua:google/osv-scanner" = "2.7.0"                # osv
+"aqua:koalaman/shellcheck" = "v0.11.0"             # shell
+"aqua:mvdan/sh" = "v3.14.1"                        # shell-format
+"aqua:golangci/golangci-lint" = "2.15.0"           # go-golangci
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"   # go-vulncheck

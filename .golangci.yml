@@ -1,0 +1,163 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Baseline adapted from diggsweden/forge-ci (CC0-1.0), since that is the same
+# linter running in its pull request gate. Every linter golangci-lint ships is
+# on unless it is listed below with a reason, so that a linter a new release
+# adds is evaluated at the next version bump rather than silently skipped.
+#
+# The layer rules live in two places with different strengths: depguard below
+# catches them in the editor and in the lint, while test/archguard proves them
+# as tests. Whoever breaks a rule should meet it as early as possible.
+
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+  build-tags:
+    - integration
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+
+issues:
+  uniq-by-line: true
+
+linters:
+  default: all
+  disable:
+    - canonicalheader # net/http normalises names in Get/Set; EFOS and Envoy spell their headers as they please.
+    - dupword # Repeated words are mostly false positives in prose doc comments.
+    - exhaustruct # Deprecated; replaced by exhaustruct_v5.
+    - exhaustruct_v5 # Most structs are deliberately partially initialised.
+    - forbidigo # Forbidden calls are per project; we have no rules yet.
+    - funlen # cyclop, gocognit and maintidx already bound function size.
+    - gochecknoglobals # Sentinel errors, OID tables and lookup tables are idiomatic Go.
+    - gomodguard # Deprecated; replaced by gomodguard_v2.
+    - ireturn # Factories and adapters legitimately return interfaces.
+    - lll # Long lines are prose and URLs; gofmt owns layout.
+    - mnd # Sizes, timeouts and status values are named where the name adds meaning.
+    - noinlineerr # `if err := f(); err != nil` is idiomatic Go.
+    - paralleltest # Parallelism is chosen per test; tparallel keeps it consistent.
+    - tagliatelle # JSON and YAML tag names are external contracts.
+    - testpackage # Some tests live in the package to reach unexported seams.
+    - wrapcheck # Errors are wrapped where a caller gains context, not at every boundary.
+    - wsl # Deprecated; replaced by wsl_v5.
+
+  settings:
+    depguard:
+      rules:
+        # ADR 0004: every import arrow points inward at the domain,
+        #
+        #   cmd  -->  app  -->  domain  <--  adapters
+        #
+        # stated as the outward edges that must not exist. Test files are
+        # composition roots and exempt, and internal/testutil is test
+        # infrastructure bound by none of this.
+        layer-domain:
+          files:
+            - "**/internal/domain/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/motrice/smartcard-op/internal/app$"
+              desc: the domain holds rules, not sequencing; move the orchestration into internal/app and leave the rule behind
+            - pkg: github.com/motrice/smartcard-op/internal/app/
+              desc: the domain holds rules, not sequencing; move the orchestration into internal/app and leave the rule behind
+            - pkg: "github.com/motrice/smartcard-op/internal/adapters$"
+              desc: the domain must not know a concrete tool; declare a small port and let the adapter satisfy it
+            - pkg: github.com/motrice/smartcard-op/internal/adapters/
+              desc: the domain must not know a concrete tool; declare a small port and let the adapter satisfy it
+            - pkg: net/http
+              desc: effects belong in an adapter; the domain must be testable without a network
+            - pkg: net
+              desc: effects belong in an adapter; the domain must be testable without a network
+            - pkg: os
+              desc: effects belong in an adapter; the domain must be testable without a filesystem
+            - pkg: log/slog
+              desc: logging belongs in an adapter; the domain returns errors instead
+
+        layer-app:
+          files:
+            - "**/internal/app/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/motrice/smartcard-op/internal/adapters$"
+              desc: a use case depends on a port, not a concrete tool; declare the interface it needs and construct the adapter in cmd
+            - pkg: github.com/motrice/smartcard-op/internal/adapters/
+              desc: a use case depends on a port, not a concrete tool; declare the interface it needs and construct the adapter in cmd
+            - pkg: net/http
+              desc: a use case does not own the transport; accept a port and let the adapter speak http
+            - pkg: os
+              desc: a use case does not read the environment; accept the values as parameters and let cmd wire them
+
+        # Adapters satisfy the ports structurally and must not know the
+        # package that declares them. That is why RevocationVerdict lives in
+        # the domain.
+        layer-adapters:
+          files:
+            - "**/internal/adapters/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/motrice/smartcard-op/internal/app$"
+              desc: an adapter is driven by a use case, never the reverse; invert the call, or move the shared logic into the domain
+            - pkg: github.com/motrice/smartcard-op/internal/app/
+              desc: an adapter is driven by a use case, never the reverse; invert the call, or move the shared logic into the domain
+
+    varnamelen:
+      min-name-length: 2
+      max-distance: 15
+      # Idiomatic Go that varnamelen would otherwise fight: a single-letter
+      # http.ResponseWriter, *http.Request, string or int parameter is clearer
+      # than a padded-out name, and the convention is universal.
+      ignore-decls:
+        - w http.ResponseWriter
+        - r *http.Request
+        - s string
+        - n int
+        - i int
+        - t testing.T
+
+    cyclop:
+      max-complexity: 15
+
+    exhaustive:
+      default-signifies-exhaustive: true
+
+    nolintlint:
+      # A suppression that silences nothing is noise the next change copies;
+      # one without a named linter and a reason cannot be reviewed.
+      allow-unused: false
+      require-specific: true
+      require-explanation: true
+
+    revive:
+      severity: "warning"
+      confidence: 0.8
+
+  exclusions:
+    generated: lax
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - cyclop # A test walks one behavioural contract end to end; splitting it hides the sequence being proved.
+          - dupl # Parallel table cases look alike by design.
+          - err113 # Fakes fabricate the failure under test.
+          - forcetypeassert # A wrong type in a fixture panics, which fails the test as plainly as t.Fatal.
+          - gocognit # As cyclop.
+          - goconst # Repeated literals keep table-driven fixtures readable.
+          - gocyclo # As cyclop.
+          - gosec # Tests deliberately exercise paths, URLs and secret-shaped values.
+          - maintidx # Parent tests group subtests into one readable contract.
+          - nestif # Table cases nest their expectations under the case they belong to.
+      # internal/testutil is test infrastructure and bound by none of the
+      # layers, as ADR 0004 states.
+      - path: "internal/testutil/"
+        linters:
+          - depguard
+          - gosec

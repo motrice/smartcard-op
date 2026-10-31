@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+gommitlint:
+  rules:
+    enabled:
+      - conventional
+      - subjectlength
+      - signoff
+  conventional:
+    types:
+      - feat
+      - fix
+      - docs
+      - refactor
+      - test
+      - build
+      - ci
+      - chore

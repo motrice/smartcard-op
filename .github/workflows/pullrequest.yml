@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Pull Request Workflow
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-checks:
+    uses: diggsweden/forge-ci/.github/workflows/pullrequest-orchestrator.yml@v0.91.13
+    secrets:
+      # Optional: uploads the lint security findings (SARIF) to Code Scanning.
+      CODE_SCANNING_TOKEN: ${{ secrets.CODE_SCANNING_TOKEN }}
+    permissions:
+      actions: read
+      contents: read
+    with:
+      forge-ci-binary-ref: v0.91.13
+      project-type: go
+      lint-engine: nanolinter
+
+  # Project-specific tests are the consumer's responsibility by forge-ci's
+  # design. They live in test.yml and run as their own job.

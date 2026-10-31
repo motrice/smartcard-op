@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+version = 1
+SPDX-PackageName = "smartcard-idp"
+SPDX-PackageSupplier = "Motrice AB"
+SPDX-PackageDownloadLocation = "https://github.com/motrice/smartcard-idp"
+
+[[annotations]]
+path = ["go.sum", "mise.lock", "testdata/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Motrice AB"
+SPDX-License-Identifier = "EUPL-1.2"

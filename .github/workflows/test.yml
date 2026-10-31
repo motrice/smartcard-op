@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# The project's own tests. forge-ci leaves go test, go vet and the
+# vulnerability policy to the consumer, and we run them through the same just
+# recipes a developer uses locally — a green CI then means the same thing as a
+# green dev loop.
+
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Compile check across build tags
+        run: just test-tags-compile
+
+      - name: Unit tests
+        run: just test-unit
+
+      - name: Architecture guards
+        run: just test-pkg ./test/archguard/
+
+      - name: Coverage
+        run: just test-coverage
+
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: govulncheck
+        run: just vuln
+
+  # The integration tests reach the EFOS test environment over the network and
+  # therefore run on a schedule rather than per pull request: they must not be
+  # able to fail a build because an external service is down.

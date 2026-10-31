@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# smartcard-op: an OpenID Provider that exchanges an EFOS smartcard for an
+# id_token.
+#
+# container-first: sbom-go.yml emits the build SBOM from go.mod/go.sum in the
+# publish stage, while the Containerfile compiles the service for each target
+# platform through Buildah's TARGETOS/TARGETARCH values.
+sign:
+  method: sigstore
+
+artifacts:
+  - name: smartcard-op
+    project-type: go
+    working-directory: .
+    config:
+      build-mode: container-first
+
+containers:
+  - name: smartcard-op
+    from: [smartcard-op]
+    container-file: Containerfile
+    context: .
+    target: runtime
+    platforms: linux/amd64,linux/arm64
+    extract:
+      binary:
+        target: export-binary
+        names: [smartcard-op]
