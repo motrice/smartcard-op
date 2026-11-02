@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+# The card listener accepts a bearer assertion of identity in an HTTP header.
+# Four independent things keep it honest, and this is the third: the login
+# endpoint is registered on port 8081 alone, Envoy replaces any client-supplied
+# header with SANITIZE_SET, the network policy below lets only Envoy reach that
+# port, and the handler refuses a request whose header is missing or carries
+# more than one certificate.
+#
+# Adjust the podSelector and namespace labels to your own ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: smartcard-op
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: smartcard-op
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy
+      ports:
+        - {protocol: TCP, port: 8080}
+        - {protocol: TCP, port: 8081}
+  egress:
+    # DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # The EFOS revocation responder and revocation lists, over plain HTTP as
+    # the certificates' AIA and CRL distribution points specify. Both are
+    # signed payloads verified against the issuer, so the transport carries no
+    # trust: ocsp.efos.se, crl.efos.se and aia.efos.se, and their SAT
+    # equivalents in a test environment.
+    #
+    # Narrow this to the resolved addresses if your policy engine cannot match
+    # on names. Failing closed here means failing closed on login, by design.
+    - ports:
+        - {protocol: TCP, port: 80}
+        - {protocol: TCP, port: 443}

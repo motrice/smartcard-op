@@ -1,0 +1,129 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+# smartcard-op runs as a single replica.
+#
+# Authorization requests live in memory for about a minute, and the
+# authorization code must be single-use, which needs server-side state. A
+# rollout therefore fails any login in flight; the user retries and the window
+# is seconds. The scale-out path, if it is ever needed, is to put the storage's
+# three maps behind a small interface and back it with Redis.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smartcard-op
+  labels:
+    app.kubernetes.io/name: smartcard-op
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Never two replicas at once: a second one would hold its own
+      # authorization requests and a login could be routed to the wrong pod.
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: smartcard-op
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: smartcard-op
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smartcard-op
+          image: ghcr.io/motrice/smartcard-op:replace-me
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: issuer
+              containerPort: 8080
+            - name: card
+              containerPort: 8081
+          env:
+            - name: SMARTCARD_OP_ISSUER
+              value: https://idp.example.se
+            - name: SMARTCARD_OP_CARD_LOGIN_URL
+              value: https://card.idp.example.se/login
+            # Zitadel's callback. Login v1 and v2 differ, so list both while
+            # migrating; the match is exact, so a wrong string fails visibly.
+            - name: SMARTCARD_OP_REDIRECT_URIS
+              value: https://id.example.se/idps/callback
+            - name: SMARTCARD_OP_KEY_DIR
+              value: /etc/smartcard-op/keys
+            - name: SMARTCARD_OP_EFOS_CA_BUNDLE
+              value: /etc/smartcard-op/efos/efos-ca-bundle.pem
+            # No default exists for this on purpose: DIGG requires level 3 for
+            # many services, and guessing would quietly admit level 2 cards.
+            - name: SMARTCARD_OP_MIN_ASSURANCE_LEVEL
+              value: "3"
+            # A domain the agency owns with no MX record -- not .invalid. The
+            # address is deliberately undeliverable; see the provider's claim
+            # mapping for why one has to exist at all.
+            - name: SMARTCARD_OP_SYNTHETIC_EMAIL_DOMAIN
+              value: card-noreply.example.se
+            # Zero means a revocation list past its nextUpdate is refused.
+            # Widen it only during a prolonged EFOS outage, and never below
+            # the EFOS issuance interval.
+            - name: SMARTCARD_OP_CRL_MAX_STALENESS
+              value: "0s"
+            - name: SMARTCARD_OP_AUDIT_REDACTION
+              value: hashed
+            - name: SMARTCARD_OP_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SMARTCARD_OP_CLIENT_ID
+              valueFrom:
+                secretKeyRef: {name: smartcard-op, key: client-id}
+            - name: SMARTCARD_OP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: smartcard-op, key: client-secret}
+            - name: SMARTCARD_OP_TOKEN_CRYPTO_KEY
+              valueFrom:
+                secretKeyRef: {name: smartcard-op, key: token-crypto-key}
+            - name: SMARTCARD_OP_AUDIT_HMAC_KEY
+              valueFrom:
+                secretKeyRef: {name: smartcard-op, key: audit-hmac-key}
+          volumeMounts:
+            - name: keys
+              mountPath: /etc/smartcard-op/keys
+              readOnly: true
+            - name: efos-ca
+              mountPath: /etc/smartcard-op/efos
+              readOnly: true
+          readinessProbe:
+            httpGet: {path: /ready, port: issuer}
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: issuer}
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        # Generated outside the cluster and synced in. The pod must not create
+        # its own key: a restart would silently invalidate every token in
+        # flight and the key's provenance would be lost from the audit trail.
+        - name: keys
+          secret:
+            secretName: smartcard-op-keys
+            defaultMode: 0400
+        - name: efos-ca
+          configMap:
+            name: smartcard-op-efos-ca

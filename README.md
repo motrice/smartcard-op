@@ -81,9 +81,9 @@ than silently skipped.
 | `internal/adapters/oidcop` — the OpenID Provider and the Zitadel claim mapping | done, tested end to end |
 | `internal/adapters/keys` — signing keys and the JWKS | done, tested |
 | CI, Containerfile, REUSE | done |
-| `internal/adapters/audit` — the structured audit log | outstanding |
-| `cmd/smartcard-op` — the two listeners, configuration, card login handler | outstanding |
-| `deploy/` — Envoy listeners, Kubernetes manifests, network policies | outstanding |
+| `internal/adapters/audit` — the hash-chained audit log | done, tested |
+| `cmd/smartcard-op` — the two listeners, configuration, card login handler | done, tested |
+| `deploy/` — Envoy listeners, Kubernetes manifests, network policies | done, templates |
 
 ## What we know about EFOS from real data
 
@@ -137,6 +137,36 @@ Three settings in it are load-bearing and not obvious:
 Claims live in this adapter rather than in the use case: they are a protocol
 projection, and the synthetic email address exists solely because of how Zitadel
 provisions brokered users. The use case has no opinion about either.
+
+The discovery document is corrected on the way out. The library hardcodes an
+implicit response type and grant, and a token endpoint auth method of `none`,
+with no option to narrow them — so the metadata would otherwise announce that a
+client may authenticate with nothing, when the storage always demands a secret.
+A document that promises more than it serves is the kind of thing an auditor
+should object to.
+
+## The audit trail
+
+One record per authentication attempt, whatever the outcome, written as
+newline-delimited JSON to stdout while the application log goes to stderr — so
+that retention and access can differ: the audit stream holds personal data and
+is kept for years, the application log does not and is not.
+
+Records are hash-chained. That makes the log tamper-evident without a
+write-once store, and it detects deletion as well as modification, since
+removing a record breaks the links of every record after it. `audit.Verify`
+walks a stream and names the first record that no longer holds.
+
+The personal identity number is redacted with a keyed HMAC **by default**. An
+unkeyed digest of a twelve-digit number is reversible by brute force in seconds,
+so the service refuses to start with hashed redaction and no key. `masked` keeps
+the birth date, `full` keeps everything — choose either only where the log
+platform's retention and access controls justify it. The certificate fingerprint
+is always present in full and is what an investigator pivots on; it discloses
+nothing about the person.
+
+The HMAC key must never rotate: a new key orphans every historical record from
+the person it concerns, which is the one thing the field exists to support.
 
 Three Go traps the code now handles, each pinned by a test:
 

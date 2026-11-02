@@ -86,7 +86,10 @@ func NewProvider(storage *Storage, config ProviderConfig) (*op.Provider, error) 
 		},
 	}
 
-	options := []op.Option{}
+	// The metadata correction runs for every request, but only rewrites the
+	// discovery document.
+	options := []op.Option{op.WithHttpInterceptors(HonestDiscovery)}
+
 	if config.AllowInsecureForTests {
 		options = append(options, op.WithAllowInsecure())
 	}

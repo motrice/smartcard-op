@@ -109,6 +109,14 @@ linters:
             - pkg: github.com/motrice/smartcard-op/internal/app/
               desc: an adapter is driven by a use case, never the reverse; invert the call, or move the shared logic into the domain
 
+    misspell:
+      # The pages a card user sees are in Swedish, as a Swedish public sector
+      # service's must be. misspell has no Swedish dictionary and reads these
+      # as misspelled English.
+      ignore-rules:
+        - Referens
+        - referens
+
     varnamelen:
       min-name-length: 2
       max-distance: 15

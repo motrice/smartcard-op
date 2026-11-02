@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+# Two services, one per listener, so that Envoy's two filter chains route to
+# two distinct destinations and the network policy can allow each port from
+# only the chain that should reach it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartcard-op-issuer
+  labels:
+    app.kubernetes.io/name: smartcard-op
+spec:
+  selector:
+    app.kubernetes.io/name: smartcard-op
+  ports:
+    - name: issuer
+      port: 8080
+      targetPort: issuer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smartcard-op-card
+  labels:
+    app.kubernetes.io/name: smartcard-op
+spec:
+  selector:
+    app.kubernetes.io/name: smartcard-op
+  ports:
+    - name: card
+      port: 8081
+      targetPort: card

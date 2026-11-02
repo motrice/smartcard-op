@@ -147,16 +147,50 @@ func TestDiscoveryAdvertisesOnlyWhatWeServe(t *testing.T) {
 			discovered.CodeChallengeMethodsSupported)
 	}
 
-	for _, grant := range discovered.GrantTypesSupported {
-		if grant == oidc.GrantTypeRefreshToken {
-			t.Error("the refresh token grant is advertised but not served")
-		}
-	}
-
 	if len(discovered.IDTokenSigningAlgValuesSupported) != 1 ||
 		discovered.IDTokenSigningAlgValuesSupported[0] != "RS256" {
 		t.Errorf("id_token_signing_alg_values_supported = %v, want [RS256]",
 			discovered.IDTokenSigningAlgValuesSupported)
+	}
+
+	// The library hardcodes an implicit response type and grant, and a
+	// token endpoint auth method of none, with no option to narrow them.
+	// Announcing that a client may authenticate with nothing — when
+	// AuthorizeClientIDSecret always demands a secret — is the kind of
+	// promise an auditor should object to, so the document is corrected on
+	// the way out and this is what holds that correction in place.
+	if got := discovered.ResponseTypesSupported; len(got) != 1 || got[0] != "code" {
+		t.Errorf("response_types_supported = %v, want [code]", got)
+	}
+
+	if got := discovered.GrantTypesSupported; len(got) != 1 ||
+		got[0] != oidc.GrantTypeCode {
+		t.Errorf("grant_types_supported = %v, want [authorization_code]", got)
+	}
+
+	for _, method := range discovered.TokenEndpointAuthMethodsSupported {
+		if method == oidc.AuthMethodNone {
+			t.Error("token_endpoint_auth_methods_supported announces none, " +
+				"but the storage always requires a secret")
+		}
+	}
+
+	// Endpoints the provider does not serve must not be advertised at all.
+	if discovered.IntrospectionEndpoint != "" {
+		t.Errorf("introspection_endpoint is advertised: %q", discovered.IntrospectionEndpoint)
+	}
+
+	if discovered.RevocationEndpoint != "" {
+		t.Errorf("revocation_endpoint is advertised: %q", discovered.RevocationEndpoint)
+	}
+
+	if discovered.EndSessionEndpoint != "" {
+		t.Errorf("end_session_endpoint is advertised: %q", discovered.EndSessionEndpoint)
+	}
+
+	if discovered.DeviceAuthorizationEndpoint != "" {
+		t.Errorf("device_authorization_endpoint is advertised: %q",
+			discovered.DeviceAuthorizationEndpoint)
 	}
 }
 

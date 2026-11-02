@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+# Envoy listeners for smartcard-op.
+#
+# Two listeners, and the split is a requirement rather than a preference.
+# Zitadel fetches the discovery document and the JWKS, and performs the code
+# exchange, from its own server -- which holds no EFOS card. Demanding a client
+# certificate on those endpoints would break the flow at the token exchange.
+#
+# Replace every example.se hostname and every path under /etc/envoy with your
+# own before applying.
+static_resources:
+  listeners:
+    # ---------------------------------------------------------------------
+    # Issuer listener: the whole OIDC router, no client certificate.
+    # ---------------------------------------------------------------------
+    - name: issuer
+      address:
+        socket_address: {address: 0.0.0.0, port_value: 8443}
+      filter_chains:
+        - filter_chain_match:
+            server_names: ["idp.example.se"]
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              # No require_client_certificate here. This is the half Zitadel
+              # talks to.
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain: {filename: /etc/envoy/tls/idp.crt}
+                    private_key: {filename: /etc/envoy/tls/idp.key}
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: issuer
+                # SANITIZE strips any x-forwarded-client-cert a client sent
+                # itself, so a forged header can never reach the OIDC
+                # endpoints either.
+                forward_client_cert_details: SANITIZE
+                route_config:
+                  name: issuer
+                  virtual_hosts:
+                    - name: issuer
+                      domains: ["idp.example.se"]
+                      routes:
+                        # The library registers routes for endpoints this
+                        # provider does not serve. The storage makes them
+                        # fail, but returning 404 here means they are not
+                        # reachable at all.
+                        - match: {path: "/oauth/introspect"}
+                          direct_response: {status: 404}
+                        - match: {path: "/revoke"}
+                          direct_response: {status: 404}
+                        - match: {path: "/end_session"}
+                          direct_response: {status: 404}
+                        - match: {path: "/device_authorization"}
+                          direct_response: {status: 404}
+                        - match: {prefix: "/"}
+                          route: {cluster: smartcard_op_issuer}
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+    # ---------------------------------------------------------------------
+    # Card listener: only GET /login, behind mTLS.
+    # ---------------------------------------------------------------------
+    - name: card
+      address:
+        socket_address: {address: 0.0.0.0, port_value: 8444}
+      filter_chains:
+        - filter_chain_match:
+            server_names: ["card.idp.example.se"]
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              require_client_certificate: true
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain: {filename: /etc/envoy/tls/card.crt}
+                    private_key: {filename: /etc/envoy/tls/card.key}
+                validation_context:
+                  # The EFOS root and the Person CAs, from aia.efos.se.
+                  trusted_ca: {filename: /etc/envoy/efos/efos-ca-bundle.pem}
+                  trust_chain_verification: VERIFY_TRUST_CHAIN
+                  # crl is deliberately NOT set. Envoy supports only a static
+                  # CRL file for client certificates, and its docs warn that
+                  # providing a CRL for one CA in a chain requires one for
+                  # every CA or verification fails for revoked and unrevoked
+                  # certificates alike. Revocation is checked live in the
+                  # provider instead, over OCSP with a CRL fallback.
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: card
+                # SANITIZE_SET replaces any header the client supplied with
+                # Envoy's own. Without it the header would be a spoofable
+                # assertion of identity.
+                forward_client_cert_details: SANITIZE_SET
+                set_current_client_cert_details:
+                  subject: true
+                  cert: true
+                  chain: true
+                route_config:
+                  name: card
+                  virtual_hosts:
+                    - name: card
+                      domains: ["card.idp.example.se"]
+                      routes:
+                        - match: {path: "/login"}
+                          route: {cluster: smartcard_op_card}
+                        - match: {prefix: "/"}
+                          direct_response: {status: 404}
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: smartcard_op_issuer
+      connect_timeout: 5s
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: smartcard_op_issuer
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: {address: smartcard-op-issuer, port_value: 8080}
+    - name: smartcard_op_card
+      connect_timeout: 5s
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: smartcard_op_card
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: {address: smartcard-op-card, port_value: 8081}

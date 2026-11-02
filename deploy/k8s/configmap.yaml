@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+# The EFOS trust anchor.
+#
+# Fetch the real files rather than copying anything from here. For production:
+#
+#   curl -o root.crt  http://aia.efos.se/SwedishPublicSectorInternalRootCAv1.crt
+#   curl -o p3.crt    http://aia.efos.se/SwedishPublicSectorPerson3CAv1.crt
+#   for f in root p3; do openssl x509 -inform DER -in $f.crt; done > efos-ca-bundle.pem
+#
+# For the test environment the names carry SAT: aiasat.efos.se and
+# SwedishPublicSectorPerson3CASATv1.crt.
+#
+# Include the root and every Person CA whose assurance level you accept. The
+# provider sorts them: a self-signed certificate becomes a root, the rest
+# intermediates, and it refuses to start on a bundle with no root -- a bundle of
+# intermediates alone would anchor nothing while appearing to.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smartcard-op-efos-ca
+  labels:
+    app.kubernetes.io/name: smartcard-op
+data:
+  efos-ca-bundle.pem: |
+    # Replace with the concatenated PEM of the EFOS root and the Person CAs.
