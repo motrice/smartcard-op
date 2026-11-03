@@ -34,6 +34,12 @@ jobs:
       CODE_SCANNING_TOKEN: ${{ secrets.CODE_SCANNING_TOKEN }}
     with:
       branch: main
+      # Same unpublished default as the pull request orchestrator: the release
+      # orchestrator at v0.91.13 also points runtime-image at
+      # ghcr.io/diggsweden/forge-ci-runtime-base:v0.90.0, which was never
+      # published. Pinned to the digest v0.90.0-pre resolved to on 2026-11-03.
+      # Remove once upstream's default points at a published tag.
+      runtime-image: ghcr.io/diggsweden/forge-ci-runtime-base@sha256:aa0837a7c04e3a28c8187e5caee35141c177001cc7fe1ed3b9fc09cca3821198
       forge-ci-binary-ref: v0.91.13
       artifacts-config: .forge-ci/artifacts.yml
       changelog-creator: git-cliff
