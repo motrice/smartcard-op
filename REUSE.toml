@@ -3,12 +3,24 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 version = 1
-SPDX-PackageName = "smartcard-idp"
+SPDX-PackageName = "smartcard-op"
 SPDX-PackageSupplier = "Motrice AB"
-SPDX-PackageDownloadLocation = "https://github.com/motrice/smartcard-idp"
+SPDX-PackageDownloadLocation = "https://github.com/motrice/smartcard-op"
 
+# Files that cannot carry a header without being rewritten by the tool that
+# owns them, or that are fixture data rather than source.
+#
+# go.mod and go.sum are maintained by `go mod tidy`; a header there is one
+# reformat away from being lost. The testdata files are generated fixtures: a
+# certificate, its digest and a golden Envoy header, none of which has a
+# comment syntax to carry a header in.
 [[annotations]]
-path = ["go.sum", "mise.lock", "testdata/**"]
+path = [
+  "go.mod",
+  "go.sum",
+  "mise.lock",
+  "**/testdata/**",
+]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Motrice AB"
 SPDX-License-Identifier = "EUPL-1.2"

@@ -57,14 +57,33 @@ just verify                   # what CI runs
 
 `just` with no arguments lists every recipe.
 
-`nanolinter` is published only as a Linux binary, so `just lint` skips it on
-macOS with a note and runs the Go checks regardless — forge-ci's pull request
-gate runs it in any case. `just lint-strict` requires it.
+forge-ci's lint gate is switched off (`lint-engine: none`). The nanolinter
+image it runs from is not publicly pullable — an anonymous pull of
+`ghcr.io/itiquette/nanolinter` answers `denied` for every tag, and a consumer's
+`GITHUB_TOKEN` does not reach it either; forge-ci's own error says as much, and
+that "this is not a lint finding". The checks it would have delegated therefore
+run directly, each as a `just` recipe so that a developer runs exactly what CI
+runs:
 
-The lint configuration is adopted from forge-ci (CC0) and runs `default: all`:
-every linter golangci-lint ships is on unless it is switched off with a reason,
-so that a linter a new release adds is evaluated at the next version bump rather
-than silently skipped.
+| | |
+|---|---|
+| `just lint` | `go vet`, `gofmt`, golangci-lint with forge-ci's `default: all` baseline |
+| `just reuse` | REUSE compliance — every file carries an SPDX header or is annotated with a reason |
+| `just secrets` | gitleaks over the tree |
+| `just commits` | conventional commits, sign-off, signature and no AI attribution |
+| `just vuln` | govulncheck over what the code actually calls |
+
+`just verify` runs lint, REUSE, secrets and the tests — what CI runs.
+
+There is no `.gommitlint.yaml`: its defaults are stricter than anything we would
+write, and they include `cryptosignature` and `aiattribution`, which are two
+rules this project wants and would not have thought to add.
+
+The rest of forge-ci's gate is in use: the plan, status and summary jobs, and
+the release orchestrator. Those needed one override — the orchestrator at
+v0.91.13 defaults `runtime-image` to a tag that was never published, so it is
+pinned by digest in `pullrequest.yml` with a note to remove the override once
+upstream points at something that exists.
 
 ## Status
 

@@ -28,7 +28,21 @@ jobs:
     with:
       forge-ci-binary-ref: v0.91.13
       project-type: go
-      lint-engine: nanolinter
+      # The nanolinter image the gate would run from is not publicly
+      # pullable: an anonymous pull of ghcr.io/itiquette/nanolinter answers
+      # denied for every tag, and a consumer's GITHUB_TOKEN does not reach it
+      # either. forge-ci's own error says as much -- "this is not a lint
+      # finding" -- so the gate is switched off and the checks it would have
+      # delegated run in lint.yml instead.
+      lint-engine: none
+      # Overriding an upstream default that cannot be pulled: the orchestrator
+      # at v0.91.13 defaults runtime-image to
+      # ghcr.io/diggsweden/forge-ci-runtime-base:v0.90.0, and that tag was
+      # never published -- the registry holds only v0.90.0-pre and timestamped
+      # pre-release variants. Pinned by digest, which is the tag v0.90.0-pre
+      # resolved on 2026-11-03, so that a moving tag cannot change what runs.
+      # Remove this once upstream's default points at a published tag.
+      runtime-image: ghcr.io/diggsweden/forge-ci-runtime-base@sha256:aa0837a7c04e3a28c8187e5caee35141c177001cc7fe1ed3b9fc09cca3821198
 
   # Project-specific tests are the consumer's responsibility by forge-ci's
   # design. They live in test.yml and run as their own job.

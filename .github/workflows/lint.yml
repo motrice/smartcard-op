@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Motrice AB
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# The checks forge-ci's lint gate would have delegated to nanolinter.
+#
+# The gate is switched off in pullrequest.yml because the nanolinter image it
+# runs from is not publicly pullable, so these run directly instead. Every one
+# of them is also a `just` recipe, so a developer runs exactly what CI runs.
+
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Go lint
+        run: just lint
+
+  compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: REUSE compliance
+        run: just reuse
+
+      - name: Secrets
+        run: just secrets
+
+  commits:
+    # Only on a pull request: on a push to main the commits are already in, and
+    # the base to compare against is the branch itself.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # gommitlint compares against the base branch, so it needs the
+          # history rather than a single commit.
+          fetch-depth: 0
+
+      - name: Install pinned toolchain
+        uses: jdx/mise-action@v3
+        with:
+          experimental: true
+
+      - name: Commit messages
+        run: just commits origin/${{ github.base_ref }}

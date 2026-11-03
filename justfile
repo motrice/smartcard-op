@@ -83,40 +83,40 @@ test: test-tags-compile test-unit
 # LINT
 # ============================================================================ #
 
-# Local Go checks plus nanolinter's plan when it is available.
-#
-# nanolinter is published only as a Linux binary, so on macOS it is absent
-# unless built from source. The recipe runs the Go checks regardless and skips
-# nanolinter with a note rather than failing the dev loop — forge-ci's pull
-# request gate runs it anyway.
+# The Go checks.
 [group('lint')]
 lint *args:
     @go vet ./...
     @test -z "$(gofmt -l -e .)" || { gofmt -l -e .; echo "gofmt: the files above need formatting"; exit 1; }
-    @golangci-lint run ./... 2>/dev/null || echo "golangci-lint not installed locally; forge-ci runs it in the gate"
-    @if command -v nanolinter >/dev/null 2>&1; then nanolinter lint "$@"; else \
-        echo "nanolinter not installed locally (Linux binary); forge-ci runs it in the gate"; fi
-
-# Requires nanolinter. Use in CI, or when you want the whole plan locally.
-[group('lint')]
-lint-strict *args:
-    @go vet ./...
-    @nanolinter verify "$@"
+    @golangci-lint run ./... "$@"
 
 [group('lint')]
 lint-fix *args:
     @gofmt -w .
-    @if command -v nanolinter >/dev/null 2>&1; then nanolinter lint --fix "$@"; else \
-        echo "nanolinter not installed locally; only formatted the Go code"; fi
+    @golangci-lint run --fix ./... "$@"
 
+# Known Go vulnerabilities in what we actually call.
 [group('lint')]
 vuln:
     @govulncheck ./...
 
-# Install the nanolinter pre-commit hook
-[group('hook')]
-hook-install:
-    @nanolinter hook install
+# REUSE compliance: every file carries an SPDX header, or is annotated in
+# REUSE.toml with a reason.
+[group('lint')]
+reuse:
+    @reuse lint
+
+# Committed secrets.
+[group('lint')]
+secrets:
+    @gitleaks dir . --no-banner --redact
+
+# Conventional commits, sign-off, signature and no AI attribution, on the
+# commits this branch adds. gommitlint runs on its own defaults; there is no
+# config file, because the defaults are stricter than anything we would write.
+[group('lint')]
+commits base="origin/main":
+    @gommitlint validate --base-branch={{ base }}
 
 # ============================================================================ #
 # BUILD
@@ -132,4 +132,4 @@ build:
 # ============================================================================ #
 
 [group('verify')]
-verify: lint test
+verify: lint reuse secrets test
